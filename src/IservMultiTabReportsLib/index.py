@@ -26,7 +26,6 @@ def read_args():
 if __name__ == "__main__":
     # аргументы
     params = read_args()
-    headersDir = params['HEADERS_PATH']
 
     # имена файлов
     filenames = sys.argv[5:]

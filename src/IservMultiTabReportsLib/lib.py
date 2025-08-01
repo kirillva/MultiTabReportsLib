@@ -105,7 +105,7 @@ class WorkbookManager(object):
                 
             if os.path.exists(row['csv_data_name']):
                 with open(row['csv_data_name'], mode='r', encoding='utf-8') as file:
-                    reader = csv.DictReader(file, delimiter=separator)  # автоматически использует первую строку как ключи
+                    reader = csv.reader(file, delimiter=separator)  # автоматически использует первую строку как ключи
                     data = list(reader)  # преобразуем в список словарей
 
                     write_data_range = CellRange(row['mapping'])
