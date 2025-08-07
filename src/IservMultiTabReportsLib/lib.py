@@ -103,10 +103,10 @@ class WorkbookManager(object):
                 targetSheet = targetWb.create_sheet(row['sheet_name'])
                 self.copy_sheet(templateSheet, targetSheet)
                 
-            if os.path.exists(row['csv_data_name']):
+            if os.path.exists(row['csv_data_name']) and row['mapping'].strip() != '':
                 with open(row['csv_data_name'], mode='r', encoding='utf-8') as file:
                     reader = csv.reader(file, delimiter=separator)  # автоматически использует первую строку как ключи
-                    data = list(reader)  # преобразуем в список словарей
+                    data = list(reader)[1:]  # преобразуем в список словарей
 
                     write_data_range = CellRange(row['mapping'])
                     write_data_range.expand(down=len(data) - 1)
