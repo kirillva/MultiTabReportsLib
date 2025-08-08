@@ -5,6 +5,9 @@ import os
 # import pandas as pd
 import csv
 from openpyxl.worksheet.cell_range import CellRange
+from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.worksheet.table import Table
+from openpyxl.utils import range_boundaries, get_column_letter
 
 class WorkbookManager(object):
     def copy_sheet(self, src_ws, tgt_ws):
@@ -73,6 +76,118 @@ class WorkbookManager(object):
         # Копируем параметры группировки (outline)
         tgt_ws.sheet_properties.outlinePr = copy(src_ws.sheet_properties.outlinePr)
 
+        # if src_ws.auto_filter:
+        #     # Получаем диапазон фильтра (например, "A1:D100")
+        #     filter_range = src_ws.auto_filter.ref
+            # print(filter_range)
+            # print(src_ws)
+            
+        #     # Применяем тот же диапазон в целевом листе
+        #     tgt_ws.auto_filter.ref = filter_range
+        
+        # Копирование валидации данных
+        # self.copy_data_validation(src_ws, tgt_ws)
+
+    def copy_named_ranges(self, src_wb, tgt_wb):
+        # Копирование каждого именованного диапазона
+        for name, named_range in src_wb.defined_names.items():
+            # Создаем новый именованный диапазон в целевой книге
+            tgt_wb.defined_names[name] = named_range
+            # print(f'{name}')
+        
+    def transfer_table_definitions(self, src_wb, tgt_wb):
+        """
+        Переносит определения таблиц без данных
+        """
+        
+        # Создаем листы-заглушки при необходимости
+        for sheetname in src_wb.sheetnames:
+            if sheetname not in tgt_wb.sheetnames:
+                tgt_wb.create_sheet(sheetname)
+        
+        # Переносим определения таблиц
+        for src_sheet in src_wb.worksheets:
+            tgt_sheet = tgt_wb[src_sheet.title]
+            
+            for table in src_sheet.tables.values():
+                try:
+                    new_table = Table(
+                        displayName=table.displayName,
+                        ref=table.ref,
+                        tableStyleInfo=table.tableStyleInfo,
+                        tableColumns=table.tableColumns
+                    )
+                    tgt_sheet.add_table(new_table)
+                except Exception as e:
+                    print(f"Ошибка: {str(e)}")
+
+
+    
+    def copy_validation_rules(self, src_sheet, tgt_sheet, src_range, tgt_range):
+        """
+        Копирует правила валидации из исходного диапазона в целевой диапазон.
+        
+        Параметры:
+        - src_sheet: Исходный лист, откуда копируются правила валидации
+        - tgt_sheet: Целевой лист, куда копируются правила валидации
+        - src_range: Диапазон исходных ячеек (например, "A1:C1")
+        - tgt_range: Диапазон целевых ячеек (например, "A1:C1000")
+        """
+        # Получаем границы диапазонов
+        src_min_col, src_min_row, src_max_col, src_max_row = range_boundaries(src_range)
+        tgt_min_col, tgt_min_row, tgt_max_col, tgt_max_row = range_boundaries(tgt_range)
+        
+        # Проверяем, что количество столбцов совпадает
+        src_cols = src_max_col - src_min_col + 1
+        tgt_cols = tgt_max_col - tgt_min_col + 1
+        if src_cols != tgt_cols:
+            raise ValueError("Количество столбцов в исходном и целевом диапазонах должно совпадать")
+        
+        # Копируем валидацию для каждого столбца
+        for col_offset in range(src_cols):
+            src_col = src_min_col + col_offset
+            tgt_col = tgt_min_col + col_offset
+            
+            # Ищем валидацию в исходном столбце
+            validation = None
+            for dv in src_sheet.data_validations.dataValidation:
+                if dv.sqref and f"{get_column_letter(src_col)}{src_min_row}" in dv.sqref:
+                    validation = dv
+                    break
+            
+            if validation:
+                # Создаем новую валидацию на основе исходной
+                new_dv = DataValidation(
+                    type=validation.type,
+                    formula1=validation.formula1,
+                    formula2=validation.formula2,
+                    allow_blank=validation.allow_blank,
+                    showErrorMessage=validation.showErrorMessage,
+                    showInputMessage=validation.showInputMessage,
+                    errorTitle=validation.errorTitle,
+                    error=validation.error,
+                    promptTitle=validation.promptTitle,
+                    prompt=validation.prompt
+                )
+                
+                # Определяем диапазон для новой валидации
+                tgt_col_letter = get_column_letter(tgt_col)
+                new_range = f"{tgt_col_letter}{tgt_min_row}:{tgt_col_letter}{tgt_max_row}"
+                new_dv.add(new_range)
+                
+                # Добавляем валидацию в целевой лист
+                tgt_sheet.add_data_validation(new_dv)
+
+    # Вспомогательная функция для преобразования номера столбца в букву
+    def get_column_letter(idx):
+        """Преобразует номер столбца (начиная с 1) в буквенное обозначение (A, B, ..., Z, AA, AB, ...)"""
+        letters = []
+        while idx > 0:
+            idx, remainder = divmod(idx - 1, 26)
+            letters.append(chr(65 + remainder))
+        return ''.join(reversed(letters))
+
+
     def write_to_range(self, sheet, excel_range, data):
         """
         Записать в указанный промежуток данные
@@ -108,9 +223,23 @@ class WorkbookManager(object):
                     reader = csv.reader(file, delimiter=separator)  # автоматически использует первую строку как ключи
                     data = list(reader)[1:]  # преобразуем в список словарей
 
+                    first_row = CellRange(row['mapping'])
+
                     write_data_range = CellRange(row['mapping'])
                     write_data_range.expand(down=len(data) - 1)
+                    
+                    self.copy_validation_rules(
+                        src_sheet=templateSheet, 
+                        tgt_sheet=targetSheet, 
+                        src_range=first_row.coord, 
+                        tgt_range=write_data_range.coord
+                    )
+
                     self.write_to_range(targetSheet, write_data_range.coord, data)
+
+
+        self.copy_named_ranges(templateWb, targetWb)
+        self.transfer_table_definitions(templateWb, targetWb)
 
         targetWb.save(output_path)
         return targetWb
