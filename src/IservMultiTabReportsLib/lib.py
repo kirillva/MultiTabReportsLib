@@ -1,8 +1,6 @@
 from copy import copy
 import openpyxl
-import sys
 import os
-# import pandas as pd
 import csv
 from openpyxl.worksheet.cell_range import CellRange
 from openpyxl.worksheet.datavalidation import DataValidation
@@ -76,18 +74,6 @@ class WorkbookManager(object):
         # Копируем параметры группировки (outline)
         tgt_ws.sheet_properties.outlinePr = copy(src_ws.sheet_properties.outlinePr)
 
-        # if src_ws.auto_filter:
-        #     # Получаем диапазон фильтра (например, "A1:D100")
-        #     filter_range = src_ws.auto_filter.ref
-            # print(filter_range)
-            # print(src_ws)
-            
-        #     # Применяем тот же диапазон в целевом листе
-        #     tgt_ws.auto_filter.ref = filter_range
-        
-        # Копирование валидации данных
-        # self.copy_data_validation(src_ws, tgt_ws)
-
     def copy_named_ranges(self, src_wb, tgt_wb):
         # Копирование каждого именованного диапазона
         for name, named_range in src_wb.defined_names.items():
@@ -115,7 +101,8 @@ class WorkbookManager(object):
                         displayName=table.displayName,
                         ref=table.ref,
                         tableStyleInfo=table.tableStyleInfo,
-                        tableColumns=table.tableColumns
+                        tableColumns=table.tableColumns,
+                        autoFilter=table.autoFilter
                     )
                     tgt_sheet.add_table(new_table)
                 except Exception as e:
